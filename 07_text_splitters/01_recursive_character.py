@@ -57,9 +57,11 @@ def demo_split_text():
     split_text: str -> list[str]（纯文本切分，不保留 metadata）
     """
     print("=== 演示 1：split_text（纯文本切分） ===")
-
-    # TODO
-    pass
+    splitter = RecursiveCharacterTextSplitter(chunk_size=80, chunk_overlap=0)
+    res = splitter.split_text(SAMPLE_TEXT)
+    for i, res in enumerate(res):
+        print(f"\n--- 块 {i + 1}（{len(res)} 字符）---")
+        print(res)
 
 
 # ============================================================
@@ -74,8 +76,10 @@ def demo_create_documents():
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=0)
 
-    # TODO
-    pass
+    docs = splitter.create_documents(texts=[SAMPLE_TEXT], metadatas=[{"source": "python", "author": "苏昊远"}])
+    print(f"生成 {len(docs)} 个 Document:")
+    for i, doc in enumerate(docs):
+        print(f"  块 {i + 1}: {doc.metadata} -> {doc.page_content[:20]}......")
 
 
 # ============================================================
@@ -92,8 +96,18 @@ def demo_split_documents():
     splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=0)
 
     # 模拟从 Loader 加载的 Document
-    # TODO
-    pass
+    docs_in = [
+        Document(
+            page_content=SAMPLE_TEXT,
+            metadata={"source": "chapter1.pdf", "page": 1},
+        ),
+    ]
+
+    docs = splitter.split_documents(docs_in)
+    print(f"输入: {len(docs_in)} 个 Document")
+    print(f"输出: {len(docs)} 个 Document（metadata 保留）:")
+    for i, doc in enumerate(docs):
+        print(f"  块 {i + 1}: metadata={doc.metadata} ->内容长度={len(doc.page_content)}")
 
 
 
