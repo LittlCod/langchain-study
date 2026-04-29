@@ -27,13 +27,30 @@ class MyRunnable:
     """顶层基类，类似 LCEL 的 Runnable。
     所有节点和链都继承它，提供统一的 invoke 方法。
     """
+    def invoke(self, input_data):
+        raise NotImplementedError("子类必须实现")
 
+    def __or__(self, other):
+        # | 运算符 把 MyRunnable 保存到 MySequence
+        return MySequence(self, other)
 
 
 class MySequence(MyRunnable):
     """处理链，类似 LCEL 的 RunnableSequence。
     每收到一个 | 就追加一个节点，执行时按顺序依次调用。
     """
+    def __init__(self, *nodes):
+        self.nodes = list(nodes)
+
+    def __or__(self, other):
+        self.nodes.append(other)
+        return self
+
+    def invoke(self, input_data):
+        result = input_data
+        for node in self.nodes:
+            result = node.invoke(result)
+        return result
 
 
 # ============================================================
