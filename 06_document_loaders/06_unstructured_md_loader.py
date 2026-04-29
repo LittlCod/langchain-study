@@ -34,7 +34,7 @@ def demo_textloader_markdown():
     适用场景：需要保留原始格式做后续处理（如 chunking、检索）。
     """
     print("=== 演示 1：TextLoader 加载 Markdown ===")
-    loader = TextLoader(DATA_FILE)
+    loader = TextLoader(DATA_FILE, encoding="utf-8")
     docs = loader.load()
 
     print(f"文档数: {len(docs)}")
@@ -61,7 +61,7 @@ def demo_unstructured_markdown():
         return
 
     try:
-        loader = UnstructuredMarkdownLoader(DATA_FILE)
+        loader = UnstructuredMarkdownLoader(DATA_FILE, encoding="utf-8")
         docs = loader.load()
     except ModuleNotFoundError as e:
         missing = str(e).split("'")[-2] if "'" in str(e) else str(e)
@@ -88,17 +88,17 @@ def demo_comparison():
     print("\n=== 演示 3：两种 Loader 对比 ===")
     if not HAS_UNSTRUCTURED:
         print("未安装 unstructured，仅展示 TextLoader 输出。")
-        loader = TextLoader(DATA_FILE)
+        loader = TextLoader(DATA_FILE, encoding="utf-8")
         docs = loader.load()
         print(f"\nTextLoader 输出（前 300 字）:")
         print(docs[0].page_content[:300])
         return
 
     # TextLoader
-    docs_text = TextLoader(DATA_FILE).load()
+    docs_text = TextLoader(DATA_FILE, encoding="utf-8").load()
     # UnstructuredMarkdownLoader
     try:
-        docs_unstruct = UnstructuredMarkdownLoader(DATA_FILE).load()
+        docs_unstruct = UnstructuredMarkdownLoader(DATA_FILE, encoding="utf-8").load()
     except ModuleNotFoundError as e:
         missing = str(e).split("'")[-2] if "'" in str(e) else str(e)
         print(f"缺少依赖: {missing}")
