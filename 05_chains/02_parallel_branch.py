@@ -24,12 +24,11 @@ from langchain_core.runnables import RunnableBranch, RunnableLambda, RunnablePas
 
 # ========================= 模型配置 =========================
 
-def get_llm():
-    from langchain_community.chat_models import ChatZhipuAI
+def get_llm(temperature=0):
+    from langchain_community.chat_models.tongyi import ChatTongyi
     import os
-    return ChatZhipuAI(
-        model="glm-4.7",
-        api_key=os.environ.get("ZHIPUAI_API_KEY"),
+    return ChatTongyi(
+        temperature=temperature
     )
 
 
@@ -53,20 +52,60 @@ def demo_parallel():
     llm = get_llm()
     
     # ---- 方式 1：显式构造 ----
-    # TODO
-    pass
+    parallel = RunnableParallel(
+        smile=ChatPromptTemplate.from_messages([
+            ("system", "你要用非常搞笑的语气输出答案"),
+            ("human", "{input}")
+        ]) | llm | StrOutputParser(),
+        zago=ChatPromptTemplate.from_messages([
+            ("system", "你要用非常雌小鬼的语气输出答案"),
+            ("human", "{input}")
+        ]) | llm | StrOutputParser(),
+    )
+    result = parallel.invoke({"input": "什么是python"})
+    print("=== 方式 1：显式构造 RunnableParallel ===")
+    print(f"类型: {type(parallel).__name__}")
+    print(f"搞笑: {result['smile']}")
+    print(f"雌小鬼: {result['zago']}")
+    print()
 
     # ---- 方式 2a：dict 在 | 右侧 ----
     # StrOutputParser 的输出（str）分发给两个分支
     print("=== 方式 2a：dict 在 | 右侧 ===")
-    # TODO
-    pass
+    chain = (ChatPromptTemplate.from_messages([
+        ("system", "用一句话回答问题"),
+        ("human", "{input}")
+    ]) | llm | StrOutputParser() | {
+        "orig": lambda x: x,
+        "length": lambda x: len(x),
+    })
+    res = chain.invoke({
+        "input": "什么是声乐"
+    })
+    print("内容为：", res["orig"])
+    print("长度为：", res["length"])
 
     # ---- 方式 2b：dict 在 | 左侧 ----
     # 同一个输入分发给两个不同的 prompt+llm 链
     print("=== 方式 2b：dict 在 | 左侧 ===")
-    # TODO
-    pass
+    def two_to_one(d):
+        sstr = ""
+        for k, v in d.items():
+            sstr += f"{k}: {v}\n"
+        return sstr
+
+    left_chain = {
+        "smile": ChatPromptTemplate.from_messages([
+            ("system", "你要用非常搞笑的语气输出答案"),
+            ("human", "{input}")
+        ]) | llm | StrOutputParser(),
+        "zago": ChatPromptTemplate.from_messages([
+            ("system", "你要用非常雌小鬼的语气输出答案"),
+            ("human", "{input}")
+        ]) | llm | StrOutputParser()
+    } | RunnableLambda(two_to_one)
+    res_left = left_chain.invoke({"input": "你是谁"})
+    print(res_left)
 
     # ---- 常见错误示范 ----
     # wrong = {"key": llm}
@@ -142,4 +181,4 @@ def demo_branch():
 
 if __name__ == "__main__":
     demo_parallel()
-    demo_branch()
+    # demo_branch()

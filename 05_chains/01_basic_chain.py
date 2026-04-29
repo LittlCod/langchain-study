@@ -90,8 +90,16 @@ def demo_function_in_chain():
     """
     print("=== 普通函数入链 ===")
     llm = get_llm()
-    # TODO
-    pass
+
+    def count_words(text):
+        return f"{text}\n共{len(text)}字符"
+
+    chain = ChatPromptTemplate.from_messages([
+        ("human", "说一个关于{topic}的笑话，{num}字以内")
+    ]) | llm | StrOutputParser() | count_words | RunnableLambda(lambda x: f"我新增了内容，原内容是\n{x}")
+
+    res = chain.invoke({"topic": "程序员", "num": 50})
+    print(res)
 
 
 # ============================================================
@@ -130,6 +138,6 @@ def demo_batch_stream():
 # ============================================================
 
 if __name__ == "__main__":
-    demo_basic_chain()
+    # demo_basic_chain()
     demo_function_in_chain()
-    demo_batch_stream()
+    # demo_batch_stream()

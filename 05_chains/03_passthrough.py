@@ -38,12 +38,11 @@ from langchain_core.runnables import RunnablePassthrough
 
 # ========================= 模型配置 =========================
 
-def get_llm():
-    from langchain_community.chat_models import ChatZhipuAI
+def get_llm(temperature=0):
+    from langchain_community.chat_models.tongyi import ChatTongyi
     import os
-    return ChatZhipuAI(
-        model="glm-4.7",
-        api_key=os.environ.get("ZHIPUAI_API_KEY"),
+    return ChatTongyi(
+        temperature=temperature
     )
 
 
@@ -64,6 +63,9 @@ def demo_passthrough_basic():
 
     r2 = passthrough.invoke({"name": "张三", "age": 25})
     print(f"passthrough.invoke(dict) = {r2}")
+
+    r3 = passthrough.invoke((1,2,3))
+    print(f"passthrough.invoke((1,2,3)) = {r3}")
     print()
 
 
@@ -77,8 +79,14 @@ def demo_assign():
     同时添加新字段 k（值为 fn 处理后的结果）。
 
     """
-    # TODO
-    pass
+    # passthrough = RunnablePassthrough()
+    r1 = RunnablePassthrough.assign(
+        say=lambda x: f"说了{x["input"]}"
+    )
+    res = r1.invoke({"input": "你好啊"})
+    print(f"原始字段 = {res["input"]}")
+    print(f"新增字段 = {res["say"]}")
+    print()
 
 
 def demo_rag_flow():
@@ -95,8 +103,26 @@ def demo_rag_flow():
     RunnablePassthrough() 确保无论输入是什么，都原样透传。
     """
     llm = get_llm()
-    # TODO
-    pass
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "请根据上下文回答问题，上下文：{context}"),
+        ("human", "{input}")
+    ])
+
+    # 模拟检索器（实际项目中用 VectorStore.as_retriever()）
+    def retriever(query: str) -> str:
+        return "LangChain 是一个用于开发 LLM 应用的框架，支持链式调用、RAG、Agent 等模式。"
+
+    chain = {
+        "context": retriever,
+        "input": RunnablePassthrough()
+            } | prompt | llm | StrOutputParser()
+
+    res = chain.invoke("什么是 LangChain")
+    print("=== RAG 完整流程 ===")
+    print(f"用户问题: 什么是 LangChain")
+    print(f"检索结果: {retriever('什么是 LangChain')}")
+    print(f"最终回答: {res}")
+    print()
 
 
 # 测试 passthrough 透传的是什么
@@ -127,7 +153,7 @@ def test_passthrough():
 # ============================================================
 
 if __name__ == "__main__":
-    #demo_passthrough_basic()
-    #demo_assign()
-    #demo_rag_flow()
+    demo_passthrough_basic()
+    demo_assign()
+    # demo_rag_flow()
     test_passthrough()
