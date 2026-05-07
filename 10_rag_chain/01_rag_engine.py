@@ -14,10 +14,12 @@
 """
 
 from pathlib import Path
+
+from langchain_classic.schema import retriever
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel, RunnableLambda
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
@@ -63,7 +65,22 @@ class DocumentManager:
         chunk_size: int = 500,
         chunk_overlap: int = 50,
     ):
-        pass
+        self.persist_dir = persist_dir
+        self.embeddings = embeddings
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        # 定义文档切分器
+        self._splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        # 初始化chroma
+        self.vectorstore = Chroma(
+            persist_directory=str(self.persist_dir),
+            embedding_function=self.embeddings,
+            collection_name=_config.CHROMA_COLLECTION_NAME,
+            collection_metadata=_config.CHROMA_COLLECTION_METADATA,
+        )
 
     def process_file(self, file_path: str) -> int:
         """
@@ -75,7 +92,30 @@ class DocumentManager:
         Returns:
             存入的文档块数
         """
-        pass
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"文件不存在:{file_path}")
+
+        # 获取文件后缀
+        ext = path.suffix.lower()
+        if ext not in self.LOADER_MAP:
+            raise ValueError(f"不支持此文件格式:{file_path}")
+
+        # 加载文件
+        loader = self.LOADER_MAP[ext](path)
+        docs = loader.load()
+        # 给文档添加元数据
+        for doc in docs:
+            doc.metadata["source_file"] = file_path
+
+        # 文档切分
+        splits = self._splitter.split_documents(docs)
+
+        # 向量库存储
+        self.vectorstore.add_documents(splits)
+
+        # 返回存入的条数
+        return len(splits)
 
     def get_retriever(self,
                       k: int = 3,
@@ -91,7 +131,18 @@ class DocumentManager:
             score_threshold: 相似度阈值（search_type=similarity_score_threshold 时生效）
             mmr_lambda: MMR 多样性参数（search_type=mmr 时生效）
         """
-        pass
+        search_kwargs = { "k": k }
+        if search_type == "mmr":
+            search_kwargs["fetch_k"] = k * 3
+            search_kwargs["lambda_mult"] = mmr_lambda
+        elif search_type == "similarity_score_threshold":
+            search_kwargs["score_threshold"] = score_threshold
+
+        return self.vectorstore.as_retriever(
+            search_type=search_type,
+            search_kwargs=search_kwargs
+        )
+
 
     def delete_collection(self):
         """删除整个向量库（重新开始时用）"""
@@ -126,7 +177,25 @@ class RAGEngine:
     """
 
     def __init__(self, doc_manager: DocumentManager, llm,max_history_rounds: int = None):
-        pass
+        self.doc_manager = doc_manager
+        self.llm = llm
+        if max_history_rounds is None:
+            self.max_history_rounds = getattr(_config, "DEFAULT_MAX_HISTORY_ROUNDS", 50)
+        else:
+            self.max_history_rounds = max_history_rounds
+
+        # 定义提示词模板
+        self._prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content=(
+                "你是一个有用的文档问答助手。基于检索到的文档内容回答用户的问题。\n"
+                "如果文档中没有相关信息，请明确告知「检索到的文档中未找到相关信息」，不要编造。"
+            )),
+            ("system", "检索到的文档：\n{context}"),
+            MessagesPlaceholder("history"),  # 历史消息直接插入
+            ("human", "用户的问题：{question}"),
+        ])
+        # 定义 OutPutParser
+        self._parser = StrOutputParser()
 
     def _print_retrieved_docs(self, docs: list):
         """
@@ -178,7 +247,37 @@ class RAGEngine:
         Returns:
             构建好的 chain（未执行）
         """
-        pass
+        # 得到 retriver
+        retriever = self.doc_manager.get_retriever(
+            k=k,
+            search_type=search_type,
+            score_threshold=score_threshold,
+            mmr_lambda=mmr_lambda
+        )
+
+        def format_docs(docs):
+            # 打印输出
+            self._print_retrieved_docs(docs)
+            # 返回format 结果
+            return "\n\n".join(
+                f"[来源: {d.metadata.get('source_file', '未知')}]\n{d.page_content}"
+                for d in docs
+            )
+
+        # 获取对话历史
+        history_messages = self._build_history_messages(history)
+
+        # 构建 chain
+        chain = RunnableParallel(
+            context=retriever | format_docs,
+            question=RunnablePassthrough()
+        ) | RunnableLambda(lambda inputs: {
+            "context": inputs["context"],
+            "history": history_messages,
+            "question": inputs["question"]
+        }) | self._prompt | self.llm | self._parser
+
+        return chain
 
     def chat(
         self,
@@ -267,4 +366,9 @@ class RAGEngine:
         Yields:
             str: LLM 生成的 token 片段
         """
-        pass
+        chain = self._build_chain(
+            history, k, search_type, score_threshold, mmr_lambda,
+        )
+
+        for token in chain.stream(query):
+            yield token
