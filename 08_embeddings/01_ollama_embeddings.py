@@ -76,9 +76,9 @@ def demo_ollama_embeddings():
     """
     使用 OllamaEmbeddings（本地向量模型）
     """
-    # TODO
-    pass
-
+    embeddings = OllamaEmbeddings(model="bge-m3")
+    query_res = embeddings.embed_query("什么是机器学习？")
+    print(len(query_res), "\n前五个维度：", query_res[:5])
 
 
 def demo_similarity():
